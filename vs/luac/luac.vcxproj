@@ -26,6 +26,15 @@
   <ItemGroup>
     <ClCompile Include="..\..\luac.c" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="luac54.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\lua.ico" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>

@@ -50,11 +50,18 @@
     <ClInclude Include="..\..\lundump.h" />
     <ClInclude Include="..\..\lvm.h" />
     <ClInclude Include="..\..\lzio.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\liblua\liblua.vcxproj">
       <Project>{9f2948ba-fed2-4579-a492-8b57bc9763ab}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="lua54.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\lua.ico" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

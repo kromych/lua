@@ -173,6 +173,7 @@
     <ClInclude Include="..\..\lundump.h" />
     <ClInclude Include="..\..\lvm.h" />
     <ClInclude Include="..\..\lzio.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\liblua\liblua.vcxproj">
@@ -181,6 +182,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="luaw.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="luaw54.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\lua.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
