@@ -117,5 +117,14 @@
     <Image Include="..\lua.ico">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="..\..\..\..\downloads\lua2.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\..\..\..\downloads\lua2.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\lua2.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

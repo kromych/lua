@@ -61,7 +61,10 @@
     <ResourceCompile Include="lua54.rc" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\..\..\downloads\lua2.ico" />
+    <Image Include="..\..\..\..\downloads\lua2.png" />
     <Image Include="..\lua.ico" />
+    <Image Include="..\lua2.ico" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
