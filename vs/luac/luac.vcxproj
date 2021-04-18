@@ -34,6 +34,7 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\lua.ico" />
+    <Image Include="..\lua1.ico" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
