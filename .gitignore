@@ -18,3 +18,4 @@ Release
 Debug
 .vs
 *.aps
+*.vcxproj.user
