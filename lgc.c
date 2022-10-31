@@ -906,18 +906,18 @@ static void GCTM (lua_State *L) {
   if (!notm(tm)) {  /* is there a finalizer? */
     int status;
     lu_byte oldah = L->allowhook;
-    int running  = g->gcrunning;
+    int oldgcstp  = g->gcstp;
+    g->gcstp |= GCSTPGC;  /* avoid GC steps */
     L->allowhook = 0;  /* stop debug hooks during GC metamethod */
-    g->gcrunning = 0;  /* avoid GC steps */
     setobj2s(L, L->top++, tm);  /* push finalizer... */
     setobj2s(L, L->top++, &v);  /* ... and its argument */
     L->ci->callstatus |= CIST_FIN;  /* will run a finalizer */
     status = luaD_pcall(L, dothecall, NULL, savestack(L, L->top - 2), 0);
     L->ci->callstatus &= ~CIST_FIN;  /* not running a finalizer anymore */
     L->allowhook = oldah;  /* restore hooks */
-    g->gcrunning = running;  /* restore state */
+    g->gcstp = oldgcstp;  /* restore state */
     if (l_unlikely(status != LUA_OK)) {  /* error while running __gc? */
-      luaE_warnerror(L, "__gc metamethod");
+      luaE_warnerror(L, "__gc");
       L->top--;  /* pops error object */
     }
   }
@@ -1011,7 +1011,8 @@ static void correctpointers (global_State *g, GCObject *o) {
 void luaC_checkfinalizer (lua_State *L, GCObject *o, Table *mt) {
   global_State *g = G(L);
   if (tofinalize(o) ||                 /* obj. is already marked... */
-      gfasttm(g, mt, TM_GC) == NULL)   /* or has no finalizer? */
+      gfasttm(g, mt, TM_GC) == NULL ||    /* or has no finalizer... */
+      (g->gcstp & GCSTPCLS))                   /* or closing state? */
     return;  /* nothing to be done */
   else {  /* move 'o' to 'finobj' list */
     GCObject **p;
@@ -1040,7 +1041,25 @@ void luaC_checkfinalizer (lua_State *L, GCObject *o, Table *mt) {
 ** =======================================================
 */
 
-static void setpause (global_State *g);
+
+/*
+** Set the "time" to wait before starting a new GC cycle; cycle will
+** start when memory use hits the threshold of ('estimate' * pause /
+** PAUSEADJ). (Division by 'estimate' should be OK: it cannot be zero,
+** because Lua cannot even start with less than PAUSEADJ bytes).
+*/
+static void setpause (global_State *g) {
+  l_mem threshold, debt;
+  int pause = getgcparam(g->gcpause);
+  l_mem estimate = g->GCestimate / PAUSEADJ;  /* adjust 'estimate' */
+  lua_assert(estimate > 0);
+  threshold = (pause < MAX_LMEM / estimate)  /* overflow? */
+            ? estimate * pause  /* no overflow */
+            : MAX_LMEM;  /* overflow; truncate to maximum */
+  debt = gettotalbytes(g) - threshold;
+  if (debt > 0) debt = 0;
+  luaE_setdebt(g, debt);
+}
 
 
 /*
@@ -1285,6 +1304,15 @@ static void atomic2gen (lua_State *L, global_State *g) {
 
 
 /*
+** Set debt for the next minor collection, which will happen when
+** memory grows 'genminormul'%.
+*/
+static void setminordebt (global_State *g) {
+  luaE_setdebt(g, -(cast(l_mem, (gettotalbytes(g) / 100)) * g->genminormul));
+}
+
+
+/*
 ** Enter generational mode. Must go until the end of an atomic cycle
 ** to ensure that all objects are correctly marked and weak tables
 ** are cleared. Then, turn all objects into old and finishes the
@@ -1296,6 +1324,7 @@ static lu_mem entergen (lua_State *L, global_State *g) {
   luaC_runtilstate(L, bitmask(GCSpropagate));  /* start new cycle */
   numobjs = atomic(L);  /* propagates all and then do the atomic stuff */
   atomic2gen(L, g);
+  setminordebt(g);  /* set debt assuming next cycle will be minor */
   return numobjs;
 }
 
@@ -1338,15 +1367,6 @@ void luaC_changemode (lua_State *L, int newmode) {
 static lu_mem fullgen (lua_State *L, global_State *g) {
   enterinc(g);
   return entergen(L, g);
-}
-
-
-/*
-** Set debt for the next minor collection, which will happen when
-** memory grows 'genminormul'%.
-*/
-static void setminordebt (global_State *g) {
-  luaE_setdebt(g, -(cast(l_mem, (gettotalbytes(g) / 100)) * g->genminormul));
 }
 
 
@@ -1421,8 +1441,8 @@ static void genstep (lua_State *L, global_State *g) {
       lu_mem numobjs = fullgen(L, g);  /* do a major collection */
       if (gettotalbytes(g) < majorbase + (majorinc / 2)) {
         /* collected at least half of memory growth since last major
-           collection; keep doing minor collections */
-        setminordebt(g);
+           collection; keep doing minor collections. */
+        lua_assert(g->lastatomic == 0);
       }
       else {  /* bad collection */
         g->lastatomic = numobjs;  /* signal that last collection was bad */
@@ -1446,26 +1466,6 @@ static void genstep (lua_State *L, global_State *g) {
 ** GC control
 ** =======================================================
 */
-
-
-/*
-** Set the "time" to wait before starting a new GC cycle; cycle will
-** start when memory use hits the threshold of ('estimate' * pause /
-** PAUSEADJ). (Division by 'estimate' should be OK: it cannot be zero,
-** because Lua cannot even start with less than PAUSEADJ bytes).
-*/
-static void setpause (global_State *g) {
-  l_mem threshold, debt;
-  int pause = getgcparam(g->gcpause);
-  l_mem estimate = g->GCestimate / PAUSEADJ;  /* adjust 'estimate' */
-  lua_assert(estimate > 0);
-  threshold = (pause < MAX_LMEM / estimate)  /* overflow? */
-            ? estimate * pause  /* no overflow */
-            : MAX_LMEM;  /* overflow; truncate to maximum */
-  debt = gettotalbytes(g) - threshold;
-  if (debt > 0) debt = 0;
-  luaE_setdebt(g, debt);
-}
 
 
 /*
@@ -1502,12 +1502,13 @@ static void deletelist (lua_State *L, GCObject *p, GCObject *limit) {
 */
 void luaC_freeallobjects (lua_State *L) {
   global_State *g = G(L);
+  g->gcstp = GCSTPCLS;  /* no extra finalizers after here */
   luaC_changemode(L, KGC_INC);
   separatetobefnz(g, 1);  /* separate all objects with finalizers */
   lua_assert(g->finobj == NULL);
   callallpendingfinalizers(L);
   deletelist(L, g->allgc, obj2gco(g->mainthread));
-  deletelist(L, g->finobj, NULL);
+  lua_assert(g->finobj == NULL);  /* no new finalizers */
   deletelist(L, g->fixedgc, NULL);  /* collect fixed objects */
   lua_assert(g->strt.nuse == 0);
 }
@@ -1647,6 +1648,7 @@ void luaC_runtilstate (lua_State *L, int statesmask) {
 }
 
 
+
 /*
 ** Performs a basic incremental step. The debt and step size are
 ** converted from bytes to "units of work"; then the function loops
@@ -1678,7 +1680,7 @@ static void incstep (lua_State *L, global_State *g) {
 void luaC_step (lua_State *L) {
   global_State *g = G(L);
   lua_assert(!g->gcemergency);
-  if (g->gcrunning) {  /* running? */
+  if (gcrunning(g)) {  /* running? */
     if(isdecGCmodegen(g))
       genstep(L, g);
     else

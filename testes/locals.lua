@@ -187,6 +187,8 @@ do   -- constants
   checkro("y", "local x, y <const>, z = 10, 20, 30; x = 11; y = 12")
   checkro("x", "local x <const>, y, z <const> = 10, 20, 30; x = 11")
   checkro("z", "local x <const>, y, z <const> = 10, 20, 30; y = 10; z = 11")
+  checkro("foo", "local foo <const> = 10; function foo() end")
+  checkro("foo", "local foo <const> = {}; function foo() end")
 
   checkro("z", [[
     local a, z <const>, b = 10;
@@ -355,6 +357,26 @@ do
 
   assert(foo1() == false)
   assert(closed == true)
+end
+
+
+do
+  -- bug in 5.4.4: 'break' may generate wrong 'close' instruction when
+  -- leaving a loop block.
+
+  local closed = false
+
+  local o1 = setmetatable({}, {__close=function() closed = true end})
+
+  local function test()
+    for k, v in next, {}, nil, o1 do
+      local function f() return k end   -- create an upvalue
+      break
+    end
+    assert(closed)
+  end
+
+  test()
 end
 
 
@@ -589,6 +611,28 @@ end
 
 
 if rawget(_G, "T") then
+
+  do
+    -- bug in 5.4.3
+    -- 'lua_settop' may use a pointer to stack invalidated by 'luaF_close'
+
+    -- reduce stack size
+    collectgarbage(); collectgarbage(); collectgarbage()
+
+    -- force a stack reallocation
+    local function loop (n)
+      if n < 400 then loop(n + 1) end
+    end
+
+    -- close metamethod will reallocate the stack
+    local o = setmetatable({}, {__close = function () loop(0) end})
+
+    local script = [[toclose 2; settop 1; return 1]]
+
+    assert(T.testC(script, o) == script)
+
+  end
+
 
   -- memory error inside closing function
   local function foo ()
